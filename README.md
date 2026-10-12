@@ -75,3 +75,19 @@ has been upgraded and reviewed.
 ## Getting Started
 
 Install dependencies with `flutter pub get`, then run with `flutter run`.
+
+## Using the same vault on another device
+
+Choose **Restore** on a new PC or browser, enter the 12-word recovery phrase
+from the original setup, and sign in to the same Google account as the phone.
+Starting a new vault creates a different encryption key and cannot decrypt the
+phone's memos; setup is blocked when existing memos are found in that Drive
+account.
+
+The app does not send a two-step verification approval or notification to the
+phone. Google controls its account sign-in verification prompts according to
+the account's security settings. The app's fingerprint, face, or device-PIN
+prompt is a local vault unlock, not a remote second factor.
+On Web, connecting Drive clears the app's remembered Google sign-in and asks
+you to sign in again each time. Google may still skip its phone prompt for a
+trusted browser or device.

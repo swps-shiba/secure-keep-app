@@ -29,11 +29,12 @@ class MemoStorageService {
 
   /// Pulls encrypted memos from Drive, decrypts in memory, refreshes cache.
   Future<List<Memo>> loadAll({bool syncFromDrive = true}) async {
+    Object? syncError;
     if (syncFromDrive) {
       try {
         await _pullFromDrive();
-      } catch (_) {
-        // Fall back to local ciphertext cache if Drive is unreachable.
+      } catch (error) {
+        syncError = error;
       }
     }
 
@@ -49,6 +50,13 @@ class MemoStorageService {
       } catch (_) {
         // Skip corrupted or undecryptable files.
       }
+    }
+
+    if (memos.isEmpty && syncError != null) {
+      throw StateError(
+        'Google Drive からメモを同期できませんでした。'
+        'Google アカウントとリカバリーコードを確認してください。\n$syncError',
+      );
     }
 
     memos.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));

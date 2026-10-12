@@ -51,7 +51,11 @@ class _SetupScreenState extends State<SetupScreen> {
       final message = e.toString();
       setState(() {
         _busy = false;
-        if (message.contains('ClientID not set') ||
+        if (message.contains('この Google Drive アカウントには既存の暗号化メモがあります')) {
+          _error =
+              '$message\n「既にリカバリーコードがある（復元）」を選び、'
+              'スマホで保管した12語と同じ Google アカウントを使用してください。';
+        } else if (message.contains('ClientID not set') ||
             message.contains('Client ID が未設定') ||
             message.contains('appClientId')) {
           _error =
@@ -222,7 +226,11 @@ class _SetupScreenState extends State<SetupScreen> {
         const SizedBox(height: 12),
         Text(
           'メモは端末で AES-256 暗号化されたあと、Google ドライブの専用フォルダへ同期されます。\n'
-          'Google だけでは解読できません（ゼロナレッジ）。',
+          'PC など別の端末では、同じ Google アカウントとスマホで控えた'
+          '12語のリカバリーコードで復元してください。\n'
+          'Google だけでは解読できません（ゼロナレッジ）。\n'
+          'スマホへの二段階認証通知は Google アカウント側の機能です。'
+          'このアプリは通知を送信しません。',
           textAlign: TextAlign.center,
           style: Theme.of(context).textTheme.bodyMedium
               ?.copyWith(color: const Color(0xFF5F6368), height: 1.45),

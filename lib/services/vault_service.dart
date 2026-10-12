@@ -49,6 +49,13 @@ class VaultService {
       throw StateError('Google Sign-In was cancelled');
     }
 
+    if ((await drive.listMemoFiles()).isNotEmpty) {
+      throw StateError(
+        'この Google Drive アカウントには既存の暗号化メモがあります。'
+        '新規セットアップではなく、リカバリーコードで復元してください。',
+      );
+    }
+
     final mnemonic = await encryption.createVault();
     await drive.ensureFolder();
     await drive.ensureVaultMeta();
@@ -133,8 +140,14 @@ class VaultService {
   Future<void> unlockDeviceKey() => encryption.unlockFromSecureStorage();
 
   Future<void> connectDrive() async {
-    var account = await googleAuth.signInSilently();
-    account ??= await googleAuth.signIn();
+    if (kIsWeb) {
+      await googleAuth.signOut();
+    } else if (await googleAuth.signInSilently() != null) {
+      await drive.ensureFolder();
+      return;
+    }
+
+    final account = await googleAuth.signIn();
     if (account == null) {
       throw StateError('Google Sign-In was cancelled');
     }
