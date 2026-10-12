@@ -59,8 +59,9 @@ GitHub Pages whenever a commit is pushed to `main`.
 2. Push this project to the `main` branch of `swps-shiba/secure-keep-app`.
    GitHub Pages serves the app publicly, and the repository source is public.
 3. Wait for the **Deploy Flutter web to GitHub Pages** workflow to finish.
-   The workflow publishes the custom-domain CNAME file and builds the app for
-   the domain root.
+   The workflow publishes the custom-domain CNAME file. The app selects the
+   repository path on `swps-shiba.github.io` and the domain root on
+   `secure-keep.swps.jp`.
 4. Verify ownership of `swps.jp` in Google Search Console and add `swps.jp`
    to the OAuth consent screen's **Authorized domains**. Set the app homepage
    to `https://swps.jp/` and its privacy policy to

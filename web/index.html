@@ -15,6 +15,14 @@
     the `--base-href` argument provided to `flutter build`.
   -->
   <base href="$FLUTTER_BASE_HREF">
+  <script>
+    if (window.location.hostname === 'swps-shiba.github.io') {
+      var baseElement = document.querySelector('base');
+      if (baseElement) {
+        baseElement.href = '/secure-keep-app/';
+      }
+    }
+  </script>
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
