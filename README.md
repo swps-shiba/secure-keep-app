@@ -32,11 +32,16 @@ only ciphertext for both memo records and media.
 - iPhone without a Mac: deploy the Web build to an HTTPS host, open it in
   Safari, then use Share → Add to Home Screen. This is an installed web app,
   not a native iOS app. A native iOS build requires macOS and Xcode.
-- Browser/PWA builds cannot invoke the native Android fingerprint or face
-  prompt. On Web, switching apps or opening a system/browser dialog does not
-  auto-lock the vault, because mobile browsers report those transitions
-  inconsistently; use the in-app lock button when stepping away. Reloading the
-  page returns to the locked screen.
+- On Web, a passkey protects the cached vault key using the WebAuthn PRF
+  extension. The browser/authenticator verifies the user with biometrics or
+  the device screen-lock PIN; the app cannot require biometrics only. This
+  requires HTTPS and a browser/authenticator that supports PRF. If unsupported,
+  Web setup cannot complete. The recovery phrase is still needed to restore on
+  another browser or device.
+- On Web, switching apps or opening a system/browser dialog does not auto-lock
+  the vault, because mobile browsers report those transitions inconsistently;
+  use the in-app lock button when stepping away. Reloading the page returns to
+  the locked screen.
 
 ### Publish a test web app with GitHub Pages
 

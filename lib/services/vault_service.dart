@@ -1,13 +1,10 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:secure_keep_app/services/encryption_service.dart';
 import 'package:secure_keep_app/services/google_auth_service.dart';
 import 'package:secure_keep_app/services/google_drive_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-enum VaultPhase {
-  needsSetup,
-  needsUnlock,
-  unlocked,
-}
+enum VaultPhase { needsSetup, needsUnlock, unlocked }
 
 /// Orchestrates Google account + recovery vault + Drive folder bootstrap.
 class VaultService {
@@ -56,13 +53,36 @@ class VaultService {
     await drive.ensureFolder();
     await drive.ensureVaultMeta();
 
+    if (!kIsWeb) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_setupCompleteKey, true);
+    }
+    return mnemonic;
+  }
+
+  Future<void> completeWebSetup() async {
+    if (!kIsWeb) {
+      throw UnsupportedError('This setup step is only available on Web');
+    }
+    await encryption.storeCurrentKeyWithPasskey();
+  }
+
+  Future<void> finishWebSetup() async {
+    if (!kIsWeb || !encryption.isUnlocked) {
+      throw StateError('Web setup must first protect the key with a passkey');
+    }
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_setupCompleteKey, true);
-    return mnemonic;
   }
 
   /// Restore on a new device with the 12-word phrase + Google account.
   Future<void> restoreFromRecoveryPhrase(String mnemonic) async {
+    if (kIsWeb) {
+      await prepareWebRecovery(mnemonic);
+      await completeWebRecovery();
+      return;
+    }
+
     if (!encryption.validateMnemonic(mnemonic)) {
       throw const FormatException('リカバリーコードが正しくありません');
     }
@@ -80,8 +100,39 @@ class VaultService {
     await prefs.setBool(_setupCompleteKey, true);
   }
 
+  Future<void> prepareWebRecovery(String mnemonic) async {
+    if (!kIsWeb) {
+      throw UnsupportedError('This recovery step is only available on Web');
+    }
+    if (!encryption.validateMnemonic(mnemonic)) {
+      throw const FormatException('リカバリーコードが正しくありません');
+    }
+    await encryption.unlockFromRecoveryPhrase(mnemonic);
+    await encryption.storeCurrentKeyWithPasskey(replaceExisting: true);
+  }
+
+  Future<void> completeWebRecovery() async {
+    if (!kIsWeb || !encryption.isUnlocked) {
+      throw StateError('Web recovery must first be unlocked with a passkey');
+    }
+    final account = await googleAuth.signIn();
+    if (account == null) {
+      throw StateError('Google Sign-In was cancelled');
+    }
+    await drive.ensureFolder();
+    await drive.ensureVaultMeta();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_setupCompleteKey, true);
+  }
+
   Future<void> unlockFromDevice() async {
     await encryption.unlockFromSecureStorage();
+    await connectDrive();
+  }
+
+  Future<void> unlockDeviceKey() => encryption.unlockFromSecureStorage();
+
+  Future<void> connectDrive() async {
     var account = await googleAuth.signInSilently();
     account ??= await googleAuth.signIn();
     if (account == null) {

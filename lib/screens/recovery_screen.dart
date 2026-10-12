@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:secure_keep_app/services/vault_service.dart';
 
 /// Restore vault on a new device using the 12-word recovery phrase.
@@ -21,6 +22,7 @@ class RecoveryScreen extends StatefulWidget {
 class _RecoveryScreenState extends State<RecoveryScreen> {
   final _controller = TextEditingController();
   bool _busy = false;
+  bool _passkeyReady = !kIsWeb;
   String? _error;
 
   @override
@@ -36,6 +38,18 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
     });
 
     try {
+      if (kIsWeb) {
+        await widget.vault.prepareWebRecovery(_controller.text);
+        _controller.clear();
+        if (!mounted) {
+          return;
+        }
+        setState(() {
+          _passkeyReady = true;
+          _busy = false;
+        });
+        return;
+      }
       await widget.vault.restoreFromRecoveryPhrase(_controller.text);
       if (!mounted) {
         return;
@@ -48,6 +62,28 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
       setState(() {
         _busy = false;
         _error = '復元に失敗しました: $e';
+      });
+    }
+  }
+
+  Future<void> _finishWebRecovery() async {
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await widget.vault.completeWebRecovery();
+      if (!mounted) {
+        return;
+      }
+      widget.onRestored();
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _busy = false;
+        _error = 'Google Drive への接続に失敗しました: $e';
       });
     }
   }
@@ -73,27 +109,28 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                '12個の英単語（リカバリーコード）をスペース区切りで入力し、'
-                '同じ Google アカウントでサインインしてください。',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      height: 1.4,
-                      color: const Color(0xFF5F6368),
-                    ),
+                _passkeyReady && kIsWeb
+                    ? 'パスキーで暗号鍵を保護しました。続けて Google アカウントへ接続します。'
+                    : '12個の英単語（リカバリーコード）をスペース区切りで入力し、'
+                          '同じ Google アカウントでサインインしてください。',
+                style: Theme.of(context).textTheme.bodyMedium
+                    ?.copyWith(height: 1.4, color: const Color(0xFF5F6368)),
               ),
               const SizedBox(height: 20),
-              TextField(
-                controller: _controller,
-                minLines: 3,
-                maxLines: 5,
-                enabled: !_busy,
-                autocorrect: false,
-                enableSuggestions: false,
-                decoration: const InputDecoration(
-                  labelText: 'リカバリーコード',
-                  hintText: 'word1 word2 … word12',
-                  alignLabelWithHint: true,
+              if (!_passkeyReady || !kIsWeb)
+                TextField(
+                  controller: _controller,
+                  minLines: 3,
+                  maxLines: 5,
+                  enabled: !_busy,
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  decoration: const InputDecoration(
+                    labelText: 'リカバリーコード',
+                    hintText: 'word1 word2 … word12',
+                    alignLabelWithHint: true,
+                  ),
                 ),
-              ),
               if (_error != null) ...[
                 const SizedBox(height: 16),
                 Text(
@@ -103,7 +140,11 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
               ],
               const Spacer(),
               FilledButton.icon(
-                onPressed: _busy ? null : _restore,
+                onPressed: _busy
+                    ? null
+                    : kIsWeb && _passkeyReady
+                    ? _finishWebRecovery
+                    : _restore,
                 icon: _busy
                     ? const SizedBox(
                         width: 18,
@@ -111,7 +152,15 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : const Icon(Icons.lock_open),
-                label: Text(_busy ? '復元中…' : '復元して同期'),
+                label: Text(
+                  _busy
+                      ? '復元中…'
+                      : kIsWeb && _passkeyReady
+                      ? 'Google Drive に接続'
+                      : kIsWeb
+                      ? 'パスキーを登録して続行'
+                      : '復元して同期',
+                ),
               ),
             ],
           ),

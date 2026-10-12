@@ -2,11 +2,14 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:encrypt/encrypt.dart' as enc;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:secure_keep_app/services/recovery_phrase_service.dart';
+import 'package:secure_keep_app/services/web_passkey_store_factory.dart';
 
 /// AES-256-CBC encryption. The DEK is derived from the 12-word recovery phrase
-/// and optionally cached in Keystore / Keychain after biometric unlock.
+/// and cached on-device only after a platform-authenticated unlock. Web wraps
+/// the cached key with a WebAuthn PRF-derived AES-GCM key.
 ///
 /// Drive only ever stores ciphertext — never the phrase or DEK.
 class EncryptionService {
@@ -21,18 +24,23 @@ class EncryptionService {
                accessibility: KeychainAccessibility.first_unlock_this_device,
              ),
            ),
-       _recovery = recoveryPhraseService ?? RecoveryPhraseService();
+       _recovery = recoveryPhraseService ?? RecoveryPhraseService(),
+       _webPasskey = createWebPasskeyStore();
 
   static const _masterKeyStorageKey = 'secure_keep_aes256_master_key';
   static const _vaultReadyKey = 'secure_keep_vault_ready';
 
   final FlutterSecureStorage _secureStorage;
   final RecoveryPhraseService _recovery;
+  final WebPasskeyStore _webPasskey;
   enc.Key? _cachedKey;
 
   bool get isUnlocked => _cachedKey != null;
 
   Future<bool> hasStoredMasterKey() async {
+    if (kIsWeb && _webPasskey.hasKey) {
+      return true;
+    }
     final ready = await _secureStorage.read(key: _vaultReadyKey);
     final key = await _secureStorage.read(key: _masterKeyStorageKey);
     return ready == '1' && key != null && key.isNotEmpty;
@@ -40,11 +48,20 @@ class EncryptionService {
 
   /// Unlocks using the DEK previously cached on this device.
   Future<void> unlockFromSecureStorage() async {
+    if (kIsWeb && _webPasskey.hasKey) {
+      _cachedKey = enc.Key.fromBase64(await _webPasskey.unlockKey());
+      return;
+    }
+
     final existing = await _secureStorage.read(key: _masterKeyStorageKey);
     if (existing == null || existing.isEmpty) {
       throw StateError('No master key cached on this device');
     }
     _cachedKey = enc.Key.fromBase64(existing);
+    if (kIsWeb) {
+      await storeCurrentKeyWithPasskey();
+      await _secureStorage.delete(key: _masterKeyStorageKey);
+    }
   }
 
   /// Derives the DEK from the recovery phrase (in-memory only).
@@ -55,6 +72,9 @@ class EncryptionService {
   /// Derives the DEK from the recovery phrase and caches it on-device.
   Future<void> unlockFromRecoveryPhrase(String mnemonic) async {
     unlockInMemoryFromRecoveryPhrase(mnemonic);
+    if (kIsWeb) {
+      return;
+    }
     await _secureStorage.write(
       key: _masterKeyStorageKey,
       value: _cachedKey!.base64,
@@ -69,12 +89,27 @@ class EncryptionService {
     return mnemonic;
   }
 
+  Future<void> storeCurrentKeyWithPasskey({
+    bool replaceExisting = false,
+  }) async {
+    if (!kIsWeb) {
+      throw UnsupportedError('Passkey key storage is only available on Web');
+    }
+    await _webPasskey.protectKey(
+      _requireKey().base64,
+      replaceExisting: replaceExisting,
+    );
+  }
+
   void lock() {
     _cachedKey = null;
   }
 
   Future<void> clearVault() async {
     _cachedKey = null;
+    if (kIsWeb) {
+      _webPasskey.clear();
+    }
     await _secureStorage.delete(key: _masterKeyStorageKey);
     await _secureStorage.delete(key: _vaultReadyKey);
   }

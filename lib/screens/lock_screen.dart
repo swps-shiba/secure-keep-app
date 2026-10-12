@@ -23,6 +23,7 @@ class LockScreen extends StatefulWidget {
 
 class _LockScreenState extends State<LockScreen> {
   bool _busy = false;
+  bool _webKeyUnlocked = false;
   String? _error;
 
   @override
@@ -44,7 +45,17 @@ class _LockScreenState extends State<LockScreen> {
     });
 
     try {
-      if (!kIsWeb) {
+      if (kIsWeb) {
+        await widget.vault.unlockDeviceKey();
+        if (!mounted) {
+          return;
+        }
+        setState(() {
+          _webKeyUnlocked = true;
+          _busy = false;
+        });
+        return;
+      } else {
         final canAuth = await widget.authService.canAuthenticate();
         if (!canAuth) {
           if (!mounted) {
@@ -83,8 +94,30 @@ class _LockScreenState extends State<LockScreen> {
       setState(() {
         _busy = false;
         _error = kIsWeb
-            ? 'ブラウザーのロック解除または Google ドライブとの同期に失敗しました。\n$e'
+            ? 'パスキーで暗号鍵を解除できませんでした。リカバリーコードで復元してください。\n$e'
             : 'ボールトの解除に失敗しました。リカバリーコードで復元してください。\n$e';
+      });
+    }
+  }
+
+  Future<void> _connectDrive() async {
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await widget.vault.connectDrive();
+      if (!mounted) {
+        return;
+      }
+      widget.onUnlocked();
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _busy = false;
+        _error = 'Google Drive への接続に失敗しました。\n$e';
       });
     }
   }
@@ -124,8 +157,10 @@ class _LockScreenState extends State<LockScreen> {
                 const SizedBox(height: 10),
                 Text(
                   kIsWeb
-                      ? 'ブラウザーに保存された暗号鍵でロックを解除します\n'
-                            '解除後、暗号化メモを Google ドライブから同期します'
+                      ? _webKeyUnlocked
+                            ? 'パスキーで暗号鍵を解除しました\nGoogle Drive に接続してメモを同期します'
+                            : 'パスキーを指紋・顔認証または端末 PIN で解除します\n'
+                                  '次に Google Drive へ接続します'
                       : '指紋・顔認証、またはデバイスのPINでロックを解除します\n'
                             '解除後、暗号化メモを Google ドライブから同期します',
                   textAlign: TextAlign.center,
@@ -144,16 +179,36 @@ class _LockScreenState extends State<LockScreen> {
                 SizedBox(
                   width: double.infinity,
                   child: FilledButton.icon(
-                    onPressed: _busy ? null : _tryUnlock,
+                    onPressed: _busy
+                        ? null
+                        : kIsWeb && _webKeyUnlocked
+                        ? _connectDrive
+                        : _tryUnlock,
                     icon: _busy
                         ? const SizedBox(
                             width: 18,
                             height: 18,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : Icon(kIsWeb ? Icons.lock_open : Icons.fingerprint),
+                        : Icon(
+                            kIsWeb && _webKeyUnlocked
+                                ? Icons.cloud_sync
+                                : kIsWeb
+                                ? Icons.lock_open
+                                : Icons.fingerprint,
+                          ),
                     label: Text(
-                      _busy ? (kIsWeb ? 'ロック解除・同期中…' : '認証・同期中…') : 'ロックを解除',
+                      _busy
+                          ? (kIsWeb && _webKeyUnlocked
+                                ? 'Google Drive に接続中…'
+                                : kIsWeb
+                                ? 'パスキー認証中…'
+                                : '認証・同期中…')
+                          : kIsWeb
+                          ? _webKeyUnlocked
+                                ? 'Google Drive に接続'
+                                : 'パスキーでロックを解除'
+                          : 'ロックを解除',
                     ),
                   ),
                 ),

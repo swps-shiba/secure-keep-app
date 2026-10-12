@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 import 'package:secure_keep_app/services/vault_service.dart';
 
@@ -25,6 +26,7 @@ class _SetupScreenState extends State<SetupScreen> {
   String? _error;
   String? _mnemonic;
   bool _confirmedSaved = false;
+  bool _passkeyReady = !kIsWeb;
 
   Future<void> _startSetup() async {
     setState(() {
@@ -66,14 +68,66 @@ class _SetupScreenState extends State<SetupScreen> {
     }
   }
 
-  void _finish() {
+  Future<void> _finish() async {
+    if (!_passkeyReady) {
+      setState(() {
+        _error = '先にパスキーを登録してください';
+      });
+      return;
+    }
     if (!_confirmedSaved) {
       setState(() {
         _error = 'リカバリーコードを安全な場所に控えたことを確認してください';
       });
       return;
     }
+    if (kIsWeb) {
+      setState(() {
+        _busy = true;
+        _error = null;
+      });
+      try {
+        await widget.vault.finishWebSetup();
+      } catch (e) {
+        if (!mounted) {
+          return;
+        }
+        setState(() {
+          _busy = false;
+          _error = 'セットアップを完了できませんでした: $e';
+        });
+        return;
+      }
+    }
+    if (!mounted) {
+      return;
+    }
     widget.onCompleted();
+  }
+
+  Future<void> _enablePasskey() async {
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await widget.vault.completeWebSetup();
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _passkeyReady = true;
+        _busy = false;
+      });
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _busy = false;
+        _error = 'パスキーの登録に失敗しました: $e';
+      });
+    }
   }
 
   @override
@@ -96,10 +150,59 @@ class _SetupScreenState extends State<SetupScreen> {
         child: SafeArea(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: _step == 0 ? _buildWelcome(scheme) : _buildPhrase(scheme),
+            child: _step == 0
+                ? _buildWelcome(scheme)
+                : _passkeyReady
+                ? _buildPhrase(scheme)
+                : _buildPasskeySetup(scheme),
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildPasskeySetup(ColorScheme scheme) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Spacer(),
+        Icon(Icons.fingerprint, size: 64, color: scheme.primary),
+        const SizedBox(height: 20),
+        Text(
+          'パスキーで暗号鍵を保護',
+          textAlign: TextAlign.center,
+          style: Theme.of(context).textTheme.headlineSmall,
+        ),
+        const SizedBox(height: 12),
+        Text(
+          'このブラウザーに暗号鍵をそのまま保存せず、パスキーで保護します。'
+          '端末の指紋・顔認証、または画面ロック PIN で確認します。',
+          textAlign: TextAlign.center,
+          style: Theme.of(context).textTheme.bodyMedium
+              ?.copyWith(color: const Color(0xFF5F6368), height: 1.45),
+        ),
+        if (_error != null) ...[
+          const SizedBox(height: 20),
+          Text(
+            _error!,
+            textAlign: TextAlign.center,
+            style: TextStyle(color: scheme.error, height: 1.4),
+          ),
+        ],
+        const Spacer(),
+        FilledButton.icon(
+          onPressed: _busy ? null : _enablePasskey,
+          icon: _busy
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.fingerprint),
+          label: Text(_busy ? '登録中…' : 'パスキーを登録'),
+        ),
+        const SizedBox(height: 28),
+      ],
     );
   }
 
@@ -113,19 +216,16 @@ class _SetupScreenState extends State<SetupScreen> {
         Text(
           'Secure Keep',
           textAlign: TextAlign.center,
-          style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
+          style: Theme.of(context).textTheme.headlineMedium
+              ?.copyWith(fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: 12),
         Text(
           'メモは端末で AES-256 暗号化されたあと、Google ドライブの専用フォルダへ同期されます。\n'
           'Google だけでは解読できません（ゼロナレッジ）。',
           textAlign: TextAlign.center,
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: const Color(0xFF5F6368),
-                height: 1.45,
-              ),
+          style: Theme.of(context).textTheme.bodyMedium
+              ?.copyWith(color: const Color(0xFF5F6368), height: 1.45),
         ),
         if (_error != null) ...[
           const SizedBox(height: 20),
@@ -168,18 +268,15 @@ class _SetupScreenState extends State<SetupScreen> {
         const SizedBox(height: 24),
         Text(
           'リカバリーコード（12語）',
-          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
+          style: Theme.of(context).textTheme.titleLarge
+              ?.copyWith(fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: 8),
         Text(
           'この12語がないと、スマホ紛失時や PC からの復号ができません。'
           '紙などに控えて安全に保管してください。アプリには再表示されません。',
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: const Color(0xFF5F6368),
-                height: 1.4,
-              ),
+          style: Theme.of(context).textTheme.bodyMedium
+              ?.copyWith(color: const Color(0xFF5F6368), height: 1.4),
         ),
         const SizedBox(height: 20),
         Expanded(
@@ -203,7 +300,9 @@ class _SetupScreenState extends State<SetupScreen> {
                   alignment: Alignment.centerLeft,
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   decoration: BoxDecoration(
-                    color: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                    color: scheme.surfaceContainerHighest.withValues(
+                      alpha: 0.5,
+                    ),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Text(
@@ -243,14 +342,11 @@ class _SetupScreenState extends State<SetupScreen> {
           controlAffinity: ListTileControlAffinity.leading,
         ),
         if (_error != null)
-          Text(
-            _error!,
-            style: TextStyle(color: scheme.error),
-          ),
+          Text(_error!, style: TextStyle(color: scheme.error)),
         const SizedBox(height: 8),
         FilledButton(
-          onPressed: _finish,
-          child: const Text('暗号化メモを始める'),
+          onPressed: _busy ? null : _finish,
+          child: Text(_busy ? '完了中…' : '暗号化メモを始める'),
         ),
         const SizedBox(height: 24),
       ],
