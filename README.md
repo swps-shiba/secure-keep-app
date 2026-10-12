@@ -8,6 +8,10 @@ Use the attachment and paste controls in the memo editor to add image or video
 files on Android, iOS, and Web. Attachment bytes are encrypted with the vault
 key before they are written to the local cache or resumably uploaded to Google Drive.
 Attachment names and media types are stored in the encrypted memo record.
+Saved attachments are decrypted in memory for an in-app image preview or video
+playback. Use the preview's Download button to explicitly export the decrypted
+file. Native video playback uses a temporary app-private file that is removed
+when the preview closes; Web video playback uses an in-memory object URL.
 
 On Web, encrypted attachment bytes are cached in IndexedDB; memo records
 continue to use the existing encrypted browser cache. Google Drive receives

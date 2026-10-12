@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:secure_keep_app/models/memo.dart';
 import 'package:secure_keep_app/services/memo_storage_service.dart';
 import 'package:secure_keep_app/theme/app_theme.dart';
+import 'package:secure_keep_app/widgets/attachment_video_preview.dart';
 import 'package:super_clipboard/super_clipboard.dart';
 import 'package:uuid/uuid.dart';
 
@@ -194,10 +195,105 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
   }
 
   Future<Uint8List?> _loadAttachment(MemoAttachment attachment) {
+    return _attachmentBytes(attachment);
+  }
+
+  Future<Uint8List?> _attachmentBytes(MemoAttachment attachment) {
+    final pending = _pendingAttachmentBytes[attachment.id];
     return _attachmentLoads.putIfAbsent(
       attachment.id,
-      () => widget.storage.loadAttachment(widget.memo!.id, attachment.id),
+      () => pending != null
+          ? Future.value(pending)
+          : widget.storage.loadAttachment(widget.memo!.id, attachment.id),
     );
+  }
+
+  Future<void> _previewAttachment(MemoAttachment attachment) async {
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(
+          attachment.name,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        content: SizedBox(
+          width: 560,
+          child: FutureBuilder<Uint8List?>(
+            future: _attachmentBytes(attachment),
+            builder: (context, snapshot) {
+              if (snapshot.hasError) {
+                return Text('添付ファイルを読み込めませんでした: ${snapshot.error}');
+              }
+              if (snapshot.connectionState != ConnectionState.done) {
+                return const SizedBox(
+                  height: 180,
+                  child: Center(child: CircularProgressIndicator()),
+                );
+              }
+              final bytes = snapshot.data;
+              if (bytes == null) {
+                return const Text('添付ファイルが見つかりません。同期後にもう一度お試しください。');
+              }
+              return ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 440),
+                child: attachment.isImage
+                    ? InteractiveViewer(
+                        child: Image.memory(
+                          bytes,
+                          fit: BoxFit.contain,
+                          errorBuilder: (context, error, stackTrace) =>
+                              const Center(child: Text('この画像形式はプレビューできません')),
+                        ),
+                      )
+                    : SizedBox(
+                        height: 380,
+                        child: buildAttachmentVideoPreview(
+                          bytes,
+                          attachment.mimeType,
+                        ),
+                      ),
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('閉じる'),
+          ),
+          FutureBuilder<Uint8List?>(
+            future: _attachmentBytes(attachment),
+            builder: (context, snapshot) => TextButton.icon(
+              onPressed: snapshot.data == null
+                  ? null
+                  : () => _downloadAttachment(attachment, snapshot.data!),
+              icon: const Icon(Icons.download_outlined),
+              label: const Text('ダウンロード'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _downloadAttachment(
+    MemoAttachment attachment,
+    Uint8List bytes,
+  ) async {
+    try {
+      final path = await FilePicker.saveFile(
+        fileName: attachment.name,
+        bytes: bytes,
+      );
+      if (kIsWeb) {
+        _showMessage('復号したファイルのダウンロードを開始しました');
+      } else if (path != null) {
+        _showMessage('復号したファイルを保存しました');
+      }
+    } catch (error) {
+      _showMessage('ダウンロードに失敗しました: $error');
+    }
   }
 
   void _removeAttachment(MemoAttachment attachment) {
@@ -489,21 +585,34 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
   Widget _buildAttachmentTile(MemoAttachment attachment) {
     final bytes = _pendingAttachmentBytes[attachment.id];
     final image = bytes != null
-        ? Image.memory(bytes, fit: BoxFit.contain)
+        ? Image.memory(
+            bytes,
+            fit: BoxFit.contain,
+            errorBuilder: (context, error, stackTrace) =>
+                const Icon(Icons.broken_image_outlined),
+          )
         : FutureBuilder<Uint8List?>(
             future: _loadAttachment(attachment),
             builder: (context, snapshot) {
               if (snapshot.hasError) {
                 return const Icon(Icons.broken_image_outlined);
               }
-              if (!snapshot.hasData) {
+              if (snapshot.connectionState != ConnectionState.done) {
                 return const SizedBox(
                   width: 24,
                   height: 24,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 );
               }
-              return Image.memory(snapshot.data!, fit: BoxFit.contain);
+              if (snapshot.data == null) {
+                return const Icon(Icons.broken_image_outlined);
+              }
+              return Image.memory(
+                snapshot.data!,
+                fit: BoxFit.contain,
+                errorBuilder: (context, error, stackTrace) =>
+                    const Icon(Icons.broken_image_outlined),
+              );
             },
           );
 
@@ -512,14 +621,13 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
         padding: const EdgeInsets.all(8),
         child: Row(
           children: [
-            if (attachment.isImage)
-              SizedBox(width: 72, height: 72, child: image)
-            else
-              const SizedBox(
-                width: 72,
-                height: 72,
-                child: Icon(Icons.video_file_outlined, size: 40),
-              ),
+            SizedBox(
+              width: 72,
+              height: 72,
+              child: attachment.isImage
+                  ? image
+                  : const Icon(Icons.video_file_outlined, size: 40),
+            ),
             const SizedBox(width: 12),
             Expanded(
               child: Text(
@@ -527,6 +635,11 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
+            ),
+            IconButton(
+              tooltip: 'プレビュー・ダウンロード',
+              onPressed: () => _previewAttachment(attachment),
+              icon: const Icon(Icons.visibility_outlined),
             ),
             IconButton(
               tooltip: '添付を削除',
