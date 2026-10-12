@@ -17,31 +17,47 @@ class MemoStorageService {
     required GoogleDriveService driveService,
     Uuid? uuid,
     MemoCache? cache,
+    MemoCache Function(String accountId)? cacheFactory,
   }) : _encryption = encryptionService,
        _drive = driveService,
        _uuid = uuid ?? const Uuid(),
-       _cache = cache ?? createMemoCache();
+       _providedCache = cache,
+       _cacheFactory =
+           cacheFactory ??
+           ((accountId) => createMemoCache(namespace: accountId));
 
   final EncryptionService _encryption;
   final GoogleDriveService _drive;
   final Uuid _uuid;
-  final MemoCache _cache;
+  final MemoCache? _providedCache;
+  final MemoCache Function(String accountId) _cacheFactory;
+  final Map<String, MemoCache> _caches = {};
+
+  Future<MemoCache> _cacheForCurrentAccount() async {
+    final providedCache = _providedCache;
+    if (providedCache != null) {
+      return providedCache;
+    }
+    final accountId = await _drive.accountId();
+    return _caches.putIfAbsent(accountId, () => _cacheFactory(accountId));
+  }
 
   /// Pulls encrypted memos from Drive, decrypts in memory, refreshes cache.
   Future<List<Memo>> loadAll({bool syncFromDrive = true}) async {
+    final cache = await _cacheForCurrentAccount();
     Object? syncError;
     if (syncFromDrive) {
       try {
-        await _pullFromDrive();
+        await _pullFromDrive(cache);
       } catch (error) {
         syncError = error;
       }
     }
 
     final memos = <Memo>[];
-    for (final id in await _cache.listIds()) {
+    for (final id in await cache.listIds()) {
       try {
-        final payload = await _cache.read(id);
+        final payload = await cache.read(id);
         if (payload == null) {
           continue;
         }
@@ -63,7 +79,7 @@ class MemoStorageService {
     return memos;
   }
 
-  Future<void> _pullFromDrive() async {
+  Future<void> _pullFromDrive(MemoCache cache) async {
     final remoteFiles = await _drive.listMemoFiles();
     final referencedAttachments = <String>{};
 
@@ -75,7 +91,7 @@ class MemoStorageService {
       referencedAttachments.addAll(
         memo.attachments.map((attachment) => '${memo.id}--${attachment.id}'),
       );
-      await _cache.write(id, ciphertext);
+      await cache.write(id, ciphertext);
     }
 
     if (referencedAttachments.isEmpty) {
@@ -92,7 +108,7 @@ class MemoStorageService {
       }
       final ciphertext = await _drive.downloadBytes(remote.id);
       _encryption.decryptBytes(ciphertext);
-      await _cache.writeAttachment(cacheId, ciphertext);
+      await cache.writeAttachment(cacheId, ciphertext);
     }
   }
 
@@ -125,7 +141,8 @@ class MemoStorageService {
     Memo memo, {
     Map<String, Uint8List> newAttachments = const {},
   }) async {
-    final oldPayload = await _cache.read(memo.id);
+    final cache = await _cacheForCurrentAccount();
+    final oldPayload = await cache.read(memo.id);
     final oldAttachments = oldPayload == null
         ? const <MemoAttachment>[]
         : Memo.fromJson(_encryption.decryptJson(oldPayload)).attachments;
@@ -142,7 +159,7 @@ class MemoStorageService {
         );
       }
       final ciphertext = _encryption.encryptBytes(entry.value);
-      await _cache.writeAttachment('${memo.id}--${entry.key}', ciphertext);
+      await cache.writeAttachment('${memo.id}--${entry.key}', ciphertext);
       await _drive.uploadAttachmentCiphertext(
         memoId: memo.id,
         attachmentId: entry.key,
@@ -151,13 +168,13 @@ class MemoStorageService {
     }
 
     final ciphertext = _encryption.encryptJson(memo.toJson());
-    await _cache.write(memo.id, ciphertext);
+    await cache.write(memo.id, ciphertext);
     await _drive.uploadMemoCiphertext(memoId: memo.id, ciphertext: ciphertext);
 
     for (final oldAttachment in oldAttachments) {
       if (!attachmentIds.contains(oldAttachment.id)) {
         final cacheId = '${memo.id}--${oldAttachment.id}';
-        await _cache.deleteAttachment(cacheId);
+        await cache.deleteAttachment(cacheId);
         await _drive.deleteAttachmentFile(
           memoId: memo.id,
           attachmentId: oldAttachment.id,
@@ -167,8 +184,9 @@ class MemoStorageService {
   }
 
   Future<Uint8List?> loadAttachment(String memoId, String attachmentId) async {
+    final cache = await _cacheForCurrentAccount();
     final cacheId = '$memoId--$attachmentId';
-    var ciphertext = await _cache.readAttachment(cacheId);
+    var ciphertext = await cache.readAttachment(cacheId);
     if (ciphertext == null) {
       final remoteFiles = await _drive.listAttachmentFiles();
       final remote = remoteFiles.where(
@@ -179,25 +197,26 @@ class MemoStorageService {
       }
       ciphertext = await _drive.downloadBytes(remote.first.id);
       _encryption.decryptBytes(ciphertext);
-      await _cache.writeAttachment(cacheId, ciphertext);
+      await cache.writeAttachment(cacheId, ciphertext);
     }
     return _encryption.decryptBytes(ciphertext);
   }
 
   Future<void> delete(String id) async {
-    final payload = await _cache.read(id);
+    final cache = await _cacheForCurrentAccount();
+    final payload = await cache.read(id);
     if (payload != null) {
       final memo = Memo.fromJson(_encryption.decryptJson(payload));
       for (final attachment in memo.attachments) {
         final cacheId = '$id--${attachment.id}';
-        await _cache.deleteAttachment(cacheId);
+        await cache.deleteAttachment(cacheId);
         await _drive.deleteAttachmentFile(
           memoId: id,
           attachmentId: attachment.id,
         );
       }
     }
-    await _cache.delete(id);
+    await cache.delete(id);
     await _drive.deleteMemoFile(id);
   }
 }

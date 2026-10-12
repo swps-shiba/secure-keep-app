@@ -14,31 +14,46 @@ class GoogleDriveService {
     this.folderName = 'Secure Keep',
   }) : _auth = authService;
 
-  static const _folderIdPrefsKey = 'secure_keep_drive_folder_id';
+  static const _folderIdsPrefsKey = 'secure_keep_drive_folder_ids';
   static const _memoMime = 'application/octet-stream';
   static const _metaFileName = 'vault.meta.json';
 
   final GoogleAuthService _auth;
   final String folderName;
 
-  String? _folderId;
+  final Map<String, String> _folderIds = {};
 
   Future<drive.DriveApi> _api() => _auth.driveApi();
 
+  Future<String> accountId() async {
+    await _auth.authenticatedClient();
+    final accountId = _auth.currentUser?.id;
+    if (accountId == null || accountId.isEmpty) {
+      throw StateError('Signed-in Google account has no account identifier');
+    }
+    return accountId;
+  }
+
   Future<String> ensureFolder() async {
-    if (_folderId != null) {
-      return _folderId!;
+    final account = await accountId();
+    final cachedFolderId = _folderIds[account];
+    if (cachedFolderId != null) {
+      return cachedFolderId;
     }
 
     final prefs = await SharedPreferences.getInstance();
-    final cached = prefs.getString(_folderIdPrefsKey);
+    final stored = prefs.getString(_folderIdsPrefsKey);
+    final storedFolderIds = stored == null
+        ? <String, dynamic>{}
+        : jsonDecode(stored) as Map<String, dynamic>;
+    final cached = storedFolderIds[account] as String?;
     if (cached != null && cached.isNotEmpty) {
       final api = await _api();
       try {
         final existing =
             await api.files.get(cached, $fields: 'id,trashed') as drive.File;
         if (existing.trashed != true) {
-          _folderId = cached;
+          _folderIds[account] = cached;
           return cached;
         }
       } catch (_) {
@@ -57,19 +72,22 @@ class GoogleDriveService {
       pageSize: 1,
     );
 
+    String folderId;
     if (listed.files != null && listed.files!.isNotEmpty) {
-      _folderId = listed.files!.first.id!;
+      folderId = listed.files!.first.id!;
     } else {
       final created = await api.files.create(
         drive.File()
           ..name = folderName
           ..mimeType = 'application/vnd.google-apps.folder',
       );
-      _folderId = created.id!;
+      folderId = created.id!;
     }
 
-    await prefs.setString(_folderIdPrefsKey, _folderId!);
-    return _folderId!;
+    _folderIds[account] = folderId;
+    storedFolderIds[account] = folderId;
+    await prefs.setString(_folderIdsPrefsKey, jsonEncode(storedFolderIds));
+    return folderId;
   }
 
   Future<void> ensureVaultMeta() async {

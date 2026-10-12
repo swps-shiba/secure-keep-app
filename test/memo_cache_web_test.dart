@@ -10,7 +10,7 @@ void main() {
     'web memo cache stores, lists, reads, and deletes encrypted payloads',
     () async {
       SharedPreferences.setMockInitialValues({'unrelated_preference': 'value'});
-      final cache = createMemoCache();
+      final cache = createMemoCache(namespace: 'test-account');
 
       await cache.write('memo-id', 'encrypted-payload');
 
@@ -41,4 +41,22 @@ void main() {
     },
     skip: !kIsWeb,
   );
+
+  test('web memo caches are isolated by account namespace', () async {
+    SharedPreferences.setMockInitialValues({
+      'secure_keep_encrypted_memo_legacy-id': 'legacy-payload',
+    });
+    final personalCache = createMemoCache(namespace: 'personal');
+    final companyCache = createMemoCache(namespace: 'company');
+
+    await personalCache.write('memo-id', 'personal-payload');
+    await companyCache.write('memo-id', 'company-payload');
+
+    expect(await personalCache.read('memo-id'), 'personal-payload');
+    expect(await companyCache.read('memo-id'), 'company-payload');
+    expect(await personalCache.listIds(), ['memo-id']);
+    expect(await companyCache.listIds(), ['memo-id']);
+    expect(await personalCache.read('legacy-id'), isNull);
+    expect(await companyCache.read('legacy-id'), isNull);
+  }, skip: !kIsWeb);
 }

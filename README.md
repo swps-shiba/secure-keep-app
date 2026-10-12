@@ -16,6 +16,8 @@ when the preview closes; Web video playback uses an in-memory object URL.
 On Web, encrypted attachment bytes are cached in IndexedDB; memo records
 continue to use the existing encrypted browser cache. Google Drive receives
 only ciphertext for both memo records and media.
+Local memo and attachment caches, as well as the remembered Drive folder,
+are separated by Google account.
 
 ## Installing on personal phones
 

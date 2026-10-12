@@ -2,7 +2,8 @@ import 'dart:typed_data';
 
 import 'package:secure_keep_app/services/memo_cache_interface.dart';
 
-MemoCache createMemoCache() => _UnsupportedMemoCache();
+MemoCache createMemoCache({required String namespace}) =>
+    _UnsupportedMemoCache();
 
 class _UnsupportedMemoCache implements MemoCache {
   Never _unsupported() =>
