@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:secure_keep_app/screens/lock_screen.dart';
 import 'package:secure_keep_app/screens/memo_list_screen.dart';
@@ -109,6 +110,10 @@ class _AppGateState extends State<_AppGate> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (kIsWeb) {
+      return;
+    }
+
     // Re-lock only when fully backgrounded. Avoid `inactive` so the
     // system biometric / PIN / Google sheets do not immediately re-lock.
     if (state == AppLifecycleState.paused ||
