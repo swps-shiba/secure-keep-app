@@ -58,9 +58,18 @@ class GoogleAuthService {
   }
 
   Future<void> _refreshAuthClient() async {
-    final client = await _googleSignIn.authenticatedClient();
+    var client = await _googleSignIn.authenticatedClient();
+    if (client == null && kIsWeb && _googleSignIn.currentUser != null) {
+      final granted = await _googleSignIn.requestScopes(_googleSignIn.scopes);
+      if (!granted) {
+        throw StateError('Google Drive access was not granted');
+      }
+      client = await _googleSignIn.authenticatedClient();
+    }
     if (client == null) {
-      throw StateError('Failed to obtain authenticated Google client');
+      throw StateError(
+        'Google sign-in succeeded, but no Drive access token was returned',
+      );
     }
     _authClient = client;
   }
