@@ -1,0 +1,54 @@
+name: secure_keep_app
+description: "Security-first zero-knowledge encrypted memo app with Google Drive sync."
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.13.5
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+
+  # Biometric / device credential (PIN) unlock
+  local_auth: ^2.3.0
+  local_auth_android: ^1.0.56
+  local_auth_darwin: ^1.6.1
+
+  # AES-256 encryption for memo payloads
+  encrypt: ^5.0.3
+
+  # Local ciphertext cache (plaintext never stored)
+  path_provider: ^2.1.5
+
+  # Device-bound DEK cache after biometric unlock
+  flutter_secure_storage: ^9.2.4
+
+  # Unique memo IDs
+  uuid: ^4.5.1
+
+  # Google Drive zero-knowledge sync
+  google_sign_in: ^6.2.2
+  googleapis: ^13.2.0
+  googleapis_auth: ^2.0.0
+  extension_google_sign_in_as_googleapis_auth: ^2.0.12
+  http: ^1.2.2
+
+  # 12-word recovery phrase (BIP39) for master-key derivation
+  bip39: ^1.0.6
+
+  # Setup / vault flags
+  shared_preferences: ^2.3.5
+  file_picker: ^11.0.3
+  super_clipboard: ^0.9.1
+  idb_shim: ^2.9.11
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
