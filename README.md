@@ -47,30 +47,36 @@ only ciphertext for both memo records and media.
   use the in-app lock button when stepping away. Reloading the page returns to
   the locked screen.
 
-### Publish a test web app with GitHub Pages
+### Publish the web app with GitHub Pages
 
 The included GitHub Actions workflow builds Flutter Web and publishes it to
 GitHub Pages whenever a commit is pushed to `main`.
 
-1. Create a **public** GitHub repository for this project. GitHub Pages is
-   publicly accessible, and the repository source will also be public.
-2. Push this project to the repository's `main` branch.
-3. In the repository, open **Settings → Pages** and select **GitHub Actions**
-   as the build and deployment source.
-4. Wait for the **Deploy Flutter web to GitHub Pages** workflow to finish. The
-   Pages URL is shown in **Settings → Pages** and in the workflow deployment.
-5. In Google Cloud Console, add the site's origin
-   (`https://<GitHub-username>.github.io`, without a path or trailing slash)
-   to the Web OAuth client's **Authorized JavaScript origins**. For a project
-   Pages URL such as `https://<GitHub-username>.github.io/<repository>/`, the
-   origin is still just `https://<GitHub-username>.github.io`.
+1. Add a DNS CNAME record for `secure-keep.swps.jp` pointing to
+   `swps-shiba.github.io`, then open the repository's **Settings → Pages**,
+   select **GitHub Actions**, and set `secure-keep.swps.jp` as the custom
+   domain. Enable **Enforce HTTPS** after DNS verification completes.
+2. Push this project to the `main` branch of `swps-shiba/secure-keep-app`.
+   GitHub Pages serves the app publicly, and the repository source is public.
+3. Wait for the **Deploy Flutter web to GitHub Pages** workflow to finish.
+   The workflow publishes the custom-domain CNAME file and builds the app for
+   the domain root.
+4. Verify ownership of `swps.jp` in Google Search Console and add `swps.jp`
+   to the OAuth consent screen's **Authorized domains**. Set the app homepage
+   to `https://swps.jp/` and its privacy policy to
+   `https://swps.jp/secure-keep-privacy.html`.
+5. In the Web OAuth client's **Authorized JavaScript origins**, add
+   `https://secure-keep.swps.jp` (origin only; no path or trailing slash).
+   Configure the OAuth consent screen for external users and submit any
+   verification requested by Google before publishing it to production.
 
 GitHub Pages serves the site publicly even when the source repository is
 private, unless the organization has GitHub Enterprise Cloud private Pages.
 Only the app code is published; memo data is encrypted in the browser before
 being stored locally or synced to Drive. However, a web app must trust the code
 delivered by its hosting provider. Use test data until the encryption design
-has been upgraded and reviewed.
+has been upgraded and reviewed. Review the app's security design before
+inviting the public to store sensitive information.
 
 ## Getting Started
 

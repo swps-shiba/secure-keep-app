@@ -13,6 +13,8 @@
 /// 5. 発行された Client ID を下の [webClientId] に貼り付ける
 /// 6. `web/index.html` の meta タグにも同じ ID を入れる
 /// 7. ホットリスタートではなく **アプリを再起動**（`flutter run -d chrome`）
+/// 8. 本番 Web 公開では `https://secure-keep.swps.jp` を Web OAuth クライアントの
+///    承認済み JavaScript 生成元に追加する
 ///
 /// Android / iOS 実機ではパッケージ名 + SHA-1（または URL scheme）で足りるため、
 /// この Web Client ID は主にブラウザ実行時に必要です。
