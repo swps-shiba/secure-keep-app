@@ -483,6 +483,7 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
           const SizedBox(height: 8),
           TextField(
             controller: _accountIdController,
+            enableInteractiveSelection: true,
             decoration: const InputDecoration(
               labelText: 'ID',
               prefixIcon: Icon(Icons.person_outline),
@@ -493,6 +494,7 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
           TextField(
             controller: _passwordController,
             obscureText: _obscurePassword,
+            enableInteractiveSelection: true,
             decoration: InputDecoration(
               labelText: 'パスワード',
               prefixIcon: const Icon(Icons.key_outlined),
@@ -512,6 +514,7 @@ class _MemoEditScreenState extends State<MemoEditScreen> {
           const SizedBox(height: 12),
           TextField(
             controller: _contentController,
+            enableInteractiveSelection: true,
             minLines: 8,
             maxLines: null,
             decoration: const InputDecoration(
